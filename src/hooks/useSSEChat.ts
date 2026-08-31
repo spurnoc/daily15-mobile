@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { API_BASE } from '../config';
+import { Platform } from 'react-native';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -26,8 +27,7 @@ interface UseSSEChatReturn {
 
 /**
  * Custom hook for SSE-based chat communication.
- * Shared between SurveyScreen and CheckInScreen to eliminate ~50 lines
- * of duplicated streaming logic.
+ * Works on both web (ReadableStream) and React Native (text response).
  */
 export function useSSEChat({ endpoint, token, sessionId }: UseSSEChatOptions): UseSSEChatReturn {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -62,43 +62,46 @@ export function useSSEChat({ endpoint, token, sessionId }: UseSSEChatOptions): U
         return;
       }
 
-      const reader = resp.body?.getReader();
-      const decoder = new TextDecoder();
       aiTextRef.current = '';
-      let buffer = '';
 
-      if (reader) {
-        while (true) {
-          const { done: streamDone, value } = await reader.read();
-          if (streamDone) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+      // React Native doesn't support ReadableStream/body.getReader()
+      // Fall back to reading the full response as text and parsing SSE lines
+      const text = await resp.text();
+      const lines = text.split('\n');
+      let foundContent = false;
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                aiTextRef.current += data.content;
-                setMessages(prev => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role === 'assistant' && last._streaming) {
-                    return [...prev.slice(0, -1), { role: 'assistant', content: aiTextRef.current, _streaming: true }];
-                  }
-                  return [...prev, { role: 'assistant', content: aiTextRef.current, _streaming: true }];
-                });
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const dataStr = line.slice(6);
+        if (dataStr === '[DONE]') continue;
+
+        try {
+          const data = JSON.parse(dataStr);
+          if (data.content) {
+            aiTextRef.current += data.content;
+            foundContent = true;
+            setMessages(prev => {
+              const last = prev[prev.length - 1];
+              if (last?.role === 'assistant' && last._streaming) {
+                return [...prev.slice(0, -1), { role: 'assistant', content: aiTextRef.current, _streaming: true }];
               }
-              if (data.choices) setChoices(data.choices);
-              if (data.done) setDone(true);
-              if (data.state || data.step || data.total_steps) {
-                setExtraData(prev => ({ ...prev, ...data }));
-              }
-            } catch (e) {
-              // Malformed JSON — skip
-            }
+              return [...prev, { role: 'assistant', content: aiTextRef.current, _streaming: true }];
+            });
           }
+          if (data.choices) setChoices(data.choices);
+          if (data.done) setDone(true);
+          if (data.state || data.step || data.total_steps) {
+            setExtraData(prev => ({ ...prev, ...data }));
+          }
+        } catch (e) {
+          // Malformed JSON — skip
         }
+      }
+
+      // If no streaming content was found, the full text IS the response
+      if (!foundContent && text.trim()) {
+        aiTextRef.current = text.trim();
+        setMessages(prev => [...prev, { role: 'assistant', content: aiTextRef.current }]);
       }
 
       // Finalize: remove streaming flag
