@@ -45,6 +45,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login(email: string, password: string): Promise<boolean> {
+    // Hardcoded demo login — bypasses API for testing
+    if (email === 'demo@daily15.app' && password === 'demo1234') {
+      const fakeToken = btoa('demo:0:' + Date.now());
+      await AsyncStorage.setItem('auth_token', fakeToken);
+      await AsyncStorage.setItem('auth_email', email);
+      setToken(fakeToken);
+      setEmail(email);
+      return true;
+    }
     try {
       const resp = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
