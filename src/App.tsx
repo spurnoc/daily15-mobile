@@ -3,8 +3,6 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import * as Haptics from 'expo-haptics';
-import { Platform } from 'react-native';
 
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import LoginScreen from './screens/LoginScreen';
@@ -13,6 +11,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import CheckInScreen from './screens/CheckInScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { COLORS } from './config';
+import { haptic } from './utils/haptics';
 
 const Tab = createBottomTabNavigator();
 

@@ -5,7 +5,7 @@ import {
   Keyboard, LayoutAnimation, Platform as RNPlatform,
 } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES } from '../config';
-import { haptic } from '../App';
+import { haptic } from '../utils/haptics';
 
 interface Message {
   role: 'user' | 'assistant';

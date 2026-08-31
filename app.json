@@ -5,9 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "icon": "./assets/icon.svg",
     "splash": {
-      "image": "./assets/splash.svg",
       "resizeMode": "contain",
       "backgroundColor": "#0a0a0a"
     },
@@ -19,11 +17,7 @@
     },
     "android": {
       "package": "com.spurnoc.daily15",
-      "backgroundColor": "#0a0a0a",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.svg",
-        "backgroundColor": "#0a0a0a"
-      }
+      "backgroundColor": "#0a0a0a"
     },
     "scheme": "daily15",
     "extra": {
