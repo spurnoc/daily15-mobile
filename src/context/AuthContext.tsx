@@ -45,14 +45,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login(email: string, password: string): Promise<boolean> {
-    // Hardcoded demo login — bypasses API for testing
+    // Demo login — uses real backend account
     if (email === 'demo@daily15.app' && password === 'demo1234') {
-      const fakeToken = btoa('demo:0:' + Date.now());
-      await AsyncStorage.setItem('auth_token', fakeToken);
-      await AsyncStorage.setItem('auth_email', email);
-      setToken(fakeToken);
-      setEmail(email);
-      return true;
+      try {
+        const resp = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.token) {
+            await AsyncStorage.setItem('auth_token', data.token);
+            await AsyncStorage.setItem('auth_email', email);
+            setToken(data.token);
+            setEmail(email);
+            return true;
+          }
+        }
+      } catch (e) {
+        // API unreachable — use a fake token so user can at least see the UI
+        const fakeToken = btoa('demo:0:' + Date.now());
+        await AsyncStorage.setItem('auth_token', fakeToken);
+        await AsyncStorage.setItem('auth_email', email);
+        setToken(fakeToken);
+        setEmail(email);
+        return true;
+      }
     }
     try {
       const resp = await fetch(`${API_BASE}/api/auth/login`, {
