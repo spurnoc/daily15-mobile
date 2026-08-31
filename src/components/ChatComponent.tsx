@@ -5,6 +5,7 @@ import {
   Keyboard, LayoutAnimation, Platform as RNPlatform,
 } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES } from '../config';
+import { haptic } from '../App';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -70,6 +71,7 @@ export default function ChatComponent({
     const answer = input.trim();
     setInput('');
     Keyboard.dismiss();
+    haptic('light');
     onSend(answer);
   };
 
@@ -163,7 +165,7 @@ export default function ChatComponent({
             <TouchableOpacity
               key={i}
               style={styles.choiceBtn}
-              onPress={() => onChoiceSelect?.(choice)}
+              onPress={() => { haptic('light'); onChoiceSelect?.(choice); }}
             >
               <View style={styles.choiceDot} />
               <Text style={styles.choiceText}>{choice}</Text>
