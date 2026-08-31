@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, RefreshControl,
-  ActivityIndicator, TouchableOpacity,
+  ActivityIndicator, TouchableOpacity, ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -46,37 +46,72 @@ export default function DashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('Your Business');
   const [checkinSummary, setCheckinSummary] = useState<string | null>(null);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
+
+  function log(msg: string) {
+    const ts = new Date().toLocaleTimeString();
+    const entry = `[${ts}] ${msg}`;
+    console.log(entry);
+    setDebugLog(prev => [...prev, entry]);
+  }
 
   const loadDashboard = useCallback(async () => {
+    log('Starting dashboard load...');
     try {
       const token = await AsyncStorage.getItem('auth_token');
+      log(`Token: ${token ? token.slice(0, 15) + '...' : 'none'}`);
+
       let sid = await AsyncStorage.getItem('survey_session_id');
       if (!sid) {
         sid = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
         await AsyncStorage.setItem('survey_session_id', sid);
       }
+      log(`Session ID: ${sid}`);
+      log(`API URL: ${API_BASE}`);
 
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      log('Fetching business profile + checkin status...');
 
-      // Fetch business profile + check-in status in parallel
       const [profileResp, checkinResp] = await Promise.all([
-        fetch(`${API_BASE}/api/survey/business-profile/${sid}`, { headers }),
-        fetch(`${API_BASE}/api/survey/checkin/status?session_id=${sid}`, { headers }),
+        fetch(`${API_BASE}/api/survey/business-profile/${sid}`, { headers }).catch(e => {
+          log(`Profile fetch error: ${e.message}`);
+          return null;
+        }),
+        fetch(`${API_BASE}/api/survey/checkin/status?session_id=${sid}`, { headers }).catch(e => {
+          log(`Checkin fetch error: ${e.message}`);
+          return null;
+        }),
       ]);
 
-      if (!profileResp.ok) {
-        setError('Complete the survey first to see your dashboard');
+      log(`Profile response: ${profileResp ? profileResp.status : 'failed'}`);
+      log(`Checkin response: ${checkinResp ? checkinResp.status : 'failed'}`);
+
+      if (!profileResp || !profileResp.ok) {
+        const status = profileResp?.status || 'no response';
+        log(`Profile not OK: ${status}`);
+        if (status === 404 || status === 'no response') {
+          setError('Complete the survey first to see your dashboard');
+        } else {
+          setError(`Could not load dashboard (HTTP ${status})`);
+        }
         setLoading(false);
         setRefreshing(false);
         return;
       }
 
       const profileData = await profileResp.json();
-      const checkinData = checkinResp.ok ? await checkinResp.json() : null;
+      log(`Profile data keys: ${Object.keys(profileData)}`);
+      log(`Has profile: ${!!profileData.profile}`);
+
+      const checkinData = checkinResp?.ok ? await checkinResp.json() : null;
+      if (checkinData) log(`Checkin data: ${JSON.stringify(Object.keys(checkinData))}`);
 
       if (profileData.profile) {
         const profile = typeof profileData.profile === 'string'
           ? JSON.parse(profileData.profile) : profileData.profile;
+        log(`Profile parsed: business_name=${profile.business_name}, cards=${profile.cards?.length || 0}`);
+
         setBusinessName(profile.business_name || 'Your Business');
 
         const selectedCards = (profile.cards || []).map((c: any) => {
@@ -84,13 +119,11 @@ export default function DashboardScreen() {
           return { ...c, ...meta, priority: false };
         });
 
-        // Apply priorities from check-in
         if (checkinData?.latest_checkin?.priorities) {
           const priorities = checkinData.latest_checkin.priorities;
           selectedCards.forEach((card: DashboardCard) => {
             if (priorities.includes(card.id)) card.priority = true;
           });
-          // Sort: priority cards first
           selectedCards.sort((a: DashboardCard, b: DashboardCard) => {
             if (a.priority && !b.priority) return -1;
             if (!a.priority && b.priority) return 1;
@@ -101,14 +134,18 @@ export default function DashboardScreen() {
         setCards(selectedCards);
         setCheckinSummary(checkinData?.latest_checkin?.summary || null);
         setError(null);
+        log(`Dashboard loaded: ${selectedCards.length} cards`);
       } else {
+        log('No profile in response — survey not complete');
         setError('Complete the survey first to see your dashboard');
       }
-    } catch (e) {
-      setError('Connection error. Pull to refresh.');
+    } catch (e: any) {
+      log(`EXCEPTION: ${e.message}`);
+      setError(`Error: ${e.message}`);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      log('Dashboard load complete');
     }
   }, []);
 
@@ -117,40 +154,76 @@ export default function DashboardScreen() {
     return unsub;
   }, [navigation, loadDashboard]);
 
-  function renderCard({ item }: { item: DashboardCard }) {
-    const meta = CARD_META[item.id] || CARD_META['goals'];
-    return (
-      <TouchableOpacity
-        style={[styles.card, item.priority && styles.cardPriority]}
-        activeOpacity={0.7}
-      >
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardKicker}>{meta.kicker}</Text>
-          {item.priority ? <View style={styles.priorityBadge}><Text style={styles.priorityBadgeText}>TOP</Text></View> : null}
-        </View>
-        <Text style={styles.cardTitle}>{meta.title}</Text>
-        <View style={styles.cardBody}>
-          <View style={styles.connectIcon}>
-            <Text style={styles.connectIconText}>+</Text>
-          </View>
-          <Text style={styles.connectText}>{meta.connectLabel}</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
   if (loading) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.text} />
         <Text style={styles.loadingText}>Loading your dashboard...</Text>
+        <TouchableOpacity onPress={() => setShowDebug(!showDebug)} style={styles.debugToggle}>
+          <Text style={styles.debugToggleText}>Show debug log</Text>
+        </TouchableOpacity>
+        {showDebug ? (
+          <ScrollView style={styles.debugContainer}>
+            {debugLog.map((line, i) => (
+              <Text key={i} style={styles.debugText}>{line}</Text>
+            ))}
+          </ScrollView>
+        ) : null}
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryBtn}
+          onPress={() => { setLoading(true); setError(null); setDebugLog([]); loadDashboard(); }}
+        >
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowDebug(!showDebug)} style={styles.debugToggle}>
+          <Text style={styles.debugToggleText}>Show debug log</Text>
+        </TouchableOpacity>
+        {showDebug ? (
+          <ScrollView style={styles.debugContainer}>
+            {debugLog.map((line, i) => (
+              <Text key={i} style={styles.debugText}>{line}</Text>
+            ))}
+          </ScrollView>
+        ) : null}
+      </View>
+    );
+  }
+
+  if (cards.length === 0) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.emptyTitle}>No dashboard yet</Text>
+        <Text style={styles.emptyText}>Complete the survey to get your personalized dashboard</Text>
+        <TouchableOpacity
+          style={styles.surveyBtn}
+          onPress={() => navigation.navigate('Survey')}
+        >
+          <Text style={styles.surveyBtnText}>Start Survey</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowDebug(!showDebug)} style={styles.debugToggle}>
+          <Text style={styles.debugToggleText}>Show debug log</Text>
+        </TouchableOpacity>
+        {showDebug ? (
+          <ScrollView style={styles.debugContainer}>
+            {debugLog.map((line, i) => (
+              <Text key={i} style={styles.debugText}>{line}</Text>
+            ))}
+          </ScrollView>
+        ) : null}
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerLogo}>D15</Text>
@@ -163,7 +236,6 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* Check-in summary banner */}
       {checkinSummary ? (
         <View style={styles.summaryBanner}>
           <Text style={styles.summaryLabel}>LAST CHECK-IN</Text>
@@ -171,45 +243,41 @@ export default function DashboardScreen() {
         </View>
       ) : null}
 
-      {/* Error state */}
-      {error ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryBtn}
-            onPress={() => { setLoading(true); loadDashboard(); }}
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : cards.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyTitle}>No dashboard yet</Text>
-          <Text style={styles.emptyText}>Complete the survey to get your personalized dashboard</Text>
-          <TouchableOpacity
-            style={styles.surveyBtn}
-            onPress={() => navigation.navigate('Survey')}
-          >
-            <Text style={styles.surveyBtnText}>Start Survey</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={cards}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          contentContainerStyle={styles.cardGrid}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); loadDashboard(); }}
-              tintColor={COLORS.text}
-              colors={[COLORS.text]}
-            />
-          }
-          renderItem={renderCard}
-        />
-      )}
+      <FlatList
+        data={cards}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        contentContainerStyle={styles.cardGrid}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); setDebugLog([]); loadDashboard(); }}
+            tintColor={COLORS.text}
+            colors={[COLORS.text]}
+          />
+        }
+        renderItem={({ item }) => {
+          const meta = CARD_META[item.id] || CARD_META['goals'];
+          return (
+            <TouchableOpacity
+              style={[styles.card, item.priority && styles.cardPriority]}
+              activeOpacity={0.7}
+            >
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardKicker}>{meta.kicker}</Text>
+                {item.priority ? <View style={styles.priorityBadge}><Text style={styles.priorityBadgeText}>TOP</Text></View> : null}
+              </View>
+              <Text style={styles.cardTitle}>{meta.title}</Text>
+              <View style={styles.cardBody}>
+                <View style={styles.connectIcon}>
+                  <Text style={styles.connectIconText}>+</Text>
+                </View>
+                <Text style={styles.connectText}>{meta.connectLabel}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+      />
     </View>
   );
 }
@@ -221,7 +289,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.xl,
+    padding: SPACING.md,
   },
   header: {
     flexDirection: 'row',
@@ -274,9 +342,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     lineHeight: 20,
   },
-  cardGrid: {
-    padding: SPACING.sm,
-  },
+  cardGrid: { padding: SPACING.sm },
   card: {
     flex: 1,
     backgroundColor: COLORS.card,
@@ -287,10 +353,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  cardPriority: {
-    borderColor: COLORS.warning,
-    borderWidth: 2,
-  },
+  cardPriority: { borderColor: COLORS.warning, borderWidth: 2 },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -390,5 +453,30 @@ const styles = StyleSheet.create({
     color: COLORS.bg,
     fontSize: FONT_SIZES.lg,
     fontWeight: '700',
+  },
+  debugToggle: {
+    marginTop: SPACING.lg,
+    padding: SPACING.sm,
+  },
+  debugToggleText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    textDecorationLine: 'underline',
+  },
+  debugContainer: {
+    marginTop: SPACING.sm,
+    maxHeight: 300,
+    width: '100%',
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  debugText: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontFamily: 'monospace',
+    marginBottom: 2,
   },
 });
