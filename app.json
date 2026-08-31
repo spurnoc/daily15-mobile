@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Daily 15",
+    "slug": "daily15",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0a0a0a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.spurnoc.daily15",
+      "backgroundColor": "#0a0a0a"
+    },
+    "android": {
+      "package": "com.spurnoc.daily15",
+      "backgroundColor": "#0a0a0a"
+    },
+    "scheme": "daily15",
+    "plugins": ["expo-router"],
+    "extra": {
+      "API_BASE": "https://daily15.spurnoc.com"
+    }
+  }
+}
