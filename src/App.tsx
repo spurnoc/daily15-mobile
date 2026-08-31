@@ -1,28 +1,29 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React from 'react';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { AsyncStorage } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
-import { AuthProvider, AuthContext } from './src/context/AuthContext';
-import LoginScreen from './src/screens/LoginScreen';
-import SurveyScreen from './src/screens/SurveyScreen';
-import DashboardScreen from './src/screens/DashboardScreen';
-import CheckInScreen from './src/screens/CheckInScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
+import { AuthProvider, AuthContext } from './context/AuthContext';
+import LoginScreen from './screens/LoginScreen';
+import SurveyScreen from './screens/SurveyScreen';
+import DashboardScreen from './screens/DashboardScreen';
+import CheckInScreen from './screens/CheckInScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import { COLORS } from './config';
 
 const Tab = createBottomTabNavigator();
 
-const darkTheme = {
+const appTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    primary: '#e8e0d0',
-    background: '#0a0a0a',
-    card: '#1a1a1a',
-    text: '#e8e0d0',
-    border: '#2a2a2a',
-    notification: '#c9302c',
+    primary: COLORS.text,
+    background: COLORS.bg,
+    card: COLORS.card,
+    text: COLORS.text,
+    border: COLORS.border,
+    notification: COLORS.danger,
   },
 };
 
@@ -32,48 +33,35 @@ function AppTabs() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#1a1a1a',
-          borderTopColor: '#2a2a2a',
-          paddingBottom: 4,
-          height: 60,
+          backgroundColor: COLORS.card,
+          borderTopColor: COLORS.border,
+          borderTopWidth: 1,
+          paddingBottom: 6,
+          paddingTop: 4,
+          height: 64,
         },
-        tabBarActiveTintColor: '#e8e0d0',
-        tabBarInactiveTintColor: '#666',
+        tabBarActiveTintColor: COLORS.text,
+        tabBarInactiveTintColor: '#555',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{ tabBarLabel: 'Dashboard' }}
-      />
-      <Tab.Screen
-        name="CheckIn"
-        component={CheckInScreen}
-        options={{ tabBarLabel: 'Check In' }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ tabBarLabel: 'Settings' }}
-      />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen name="Survey" component={SurveyScreen} options={{ tabBarLabel: 'Survey' }} />
+      <Tab.Screen name="CheckIn" component={CheckInScreen} options={{ tabBarLabel: 'Check In' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   );
 }
 
 function Root() {
-  const { token, loading } = useContext(AuthContext);
+  const { token, loading } = React.useContext(AuthContext);
 
-  if (loading) {
-    return null; // splash screen
-  }
+  if (loading) return null;
 
-  if (!token) {
-    return <LoginScreen />;
-  }
+  if (!token) return <LoginScreen />;
 
   return (
-    <NavigationContainer theme={darkTheme}>
+    <NavigationContainer theme={appTheme}>
       <AppTabs />
     </NavigationContainer>
   );
@@ -82,6 +70,7 @@ function Root() {
 export default function App() {
   return (
     <SafeAreaProvider>
+      <StatusBar style="light" />
       <AuthProvider>
         <Root />
       </AuthProvider>

@@ -1,25 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE, COLORS, SPACING, FONT_SIZES } from '../config';
+import { useNavigation } from '@react-navigation/native';
+
+import ChatComponent from '../components/ChatComponent';
+import { API_BASE } from '../config';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  _streaming?: boolean;
 }
 
 export default function CheckInScreen() {
+  const navigation = useNavigation<any>();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState('');
   const [done, setDone] = useState(false);
   const [hasOnboarded, setHasOnboarded] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     init();
@@ -31,7 +30,6 @@ export default function CheckInScreen() {
     const sid = await AsyncStorage.getItem('survey_session_id');
     setSessionId(sid || '');
 
-    // Check if onboarding is complete
     try {
       const resp = await fetch(`${API_BASE}/api/survey/checkin/status?session_id=${sid}`, {
         headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
@@ -39,19 +37,23 @@ export default function CheckInScreen() {
       const data = await resp.json();
       if (data.has_onboarded) {
         setHasOnboarded(true);
-        setMessages([{ role: 'assistant', content: "Welcome back. What's on your plate today?" }]);
+        const lastDate = data.latest_checkin
+          ? new Date(data.latest_checkin.created_at).toLocaleDateString()
+          : null;
+        setMessages([{
+          role: 'assistant',
+          content: lastDate
+            ? `Welcome back. You checked in on ${lastDate}. Ready for today's check-in? What's on your plate today?`
+            : "Welcome back. Ready for a quick 2-minute check-in? What's on your plate today?",
+        }]);
       }
     } catch (e) {
-      setMessages([{ role: 'assistant', content: 'Complete the survey first to start check-ins.' }]);
+      setMessages([{ role: 'assistant', content: 'Connection error. Please try again.' }]);
     }
   }
 
-  async function sendAnswer() {
-    if (!input.trim() || loading) return;
-    const answer = input.trim();
-    setInput('');
+  async function sendAnswer(answer: string) {
     setLoading(true);
-
     setMessages(prev => [...prev, { role: 'user', content: answer }]);
 
     try {
@@ -75,7 +77,6 @@ export default function CheckInScreen() {
         return;
       }
 
-      // Read SSE stream
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
       let aiText = '';
@@ -96,10 +97,10 @@ export default function CheckInScreen() {
                   aiText += data.content;
                   setMessages(prev => {
                     const last = prev[prev.length - 1];
-                    if (last?.role === 'assistant' && (last as any)._streaming) {
-                      return [...prev.slice(0, -1), { role: 'assistant', content: aiText, _streaming: true } as any];
+                    if (last?.role === 'assistant' && last._streaming) {
+                      return [...prev.slice(0, -1), { role: 'assistant', content: aiText, _streaming: true }];
                     }
-                    return [...prev, { role: 'assistant', content: aiText, _streaming: true } as any];
+                    return [...prev, { role: 'assistant', content: aiText, _streaming: true }];
                   });
                 }
                 if (data.done) setDone(true);
@@ -119,118 +120,41 @@ export default function CheckInScreen() {
     }
   }
 
-  if (done) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.complete}>
-          <Text style={styles.completeIcon}>✓</Text>
-          <Text style={styles.completeTitle}>Check-in done</Text>
-          <Text style={styles.completeText}>Your dashboard has been updated with today's priorities.</Text>
-        </View>
-      </View>
-    );
-  }
-
   if (!hasOnboarded) {
     return (
-      <View style={styles.container}>
-        <View style={styles.complete}>
-          <Text style={styles.completeTitle}>Not yet</Text>
-          <Text style={styles.completeText}>Complete the survey first to start daily check-ins.</Text>
-        </View>
-      </View>
+      <ChatComponent
+        messages={[]}
+        setMessages={setMessages}
+        onSend={() => {}}
+        loading={false}
+        title="Not yet"
+        subtitle="Daily Check-in"
+        done
+        doneTitle="Complete the survey first"
+        doneText="You need to finish the onboarding survey before you can do daily check-ins."
+        doneAction={{
+          label: 'Go to Survey',
+          onPress: () => navigation.navigate('Survey'),
+        }}
+      />
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}
-      keyboardVerticalOffset={90}
-    >
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(_, i) => i.toString()}
-        renderItem={({ item }) => (
-          <View style={[styles.message, item.role === 'user' ? styles.userMsg : styles.aiMsg]}>
-            <View style={[styles.bubble, item.role === 'user' ? styles.userBubble : styles.aiBubble]}>
-              <Text style={[styles.bubbleText, item.role === 'user' ? styles.userBubbleText : styles.aiBubbleText]}>
-                {item.content}
-              </Text>
-            </View>
-          </View>
-        )}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        contentContainerStyle={styles.messageList}
-      />
-
-      {loading && (
-        <View style={styles.thinkingContainer}>
-          <ActivityIndicator size="small" color={COLORS.textMuted} />
-          <Text style={styles.thinkingText}>Thinking...</Text>
-        </View>
-      )}
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Type your answer..."
-          placeholderTextColor={COLORS.textMuted}
-          multiline
-          maxHeight={100}
-          editable={!loading}
-          onSubmitEditing={sendAnswer}
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
-          onPress={sendAnswer}
-          disabled={!input.trim() || loading}
-        >
-          <Text style={styles.sendBtnText}>↑</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+    <ChatComponent
+      messages={messages}
+      setMessages={setMessages}
+      onSend={sendAnswer}
+      loading={loading}
+      title="Daily Check-in"
+      subtitle="Take 2 minutes"
+      done={done}
+      doneTitle="Check-in done"
+      doneText="Your dashboard has been updated with today's priorities."
+      doneAction={{
+        label: 'View Dashboard',
+        onPress: () => navigation.navigate('Dashboard'),
+      }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  messageList: { padding: SPACING.md, paddingBottom: SPACING.xl },
-  message: { marginBottom: SPACING.sm, flexDirection: 'row' },
-  userMsg: { justifyContent: 'flex-end' },
-  aiMsg: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '80%', borderRadius: 16, padding: SPACING.md },
-  userBubble: { backgroundColor: COLORS.text },
-  aiBubble: { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border },
-  bubbleText: { fontSize: FONT_SIZES.md, lineHeight: 22 },
-  userBubbleText: { color: COLORS.bg },
-  aiBubbleText: { color: COLORS.text },
-  thinkingContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: SPACING.sm,
-  },
-  thinkingText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
-  inputContainer: {
-    flexDirection: 'row', padding: SPACING.md, gap: SPACING.sm,
-    borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.bg,
-  },
-  input: {
-    flex: 1, backgroundColor: COLORS.inputBg, borderRadius: 20,
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
-    color: COLORS.text, fontSize: FONT_SIZES.md, maxHeight: 100,
-  },
-  sendBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: COLORS.text, justifyContent: 'center', alignItems: 'center',
-  },
-  sendBtnDisabled: { opacity: 0.3 },
-  sendBtnText: { color: COLORS.bg, fontSize: 22, fontWeight: '700' },
-  complete: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
-  completeIcon: { fontSize: 64, color: COLORS.success, marginBottom: SPACING.md },
-  completeTitle: { fontSize: FONT_SIZES.xxl, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.sm },
-  completeText: { fontSize: FONT_SIZES.md, color: COLORS.textMuted, textAlign: 'center' },
-});
