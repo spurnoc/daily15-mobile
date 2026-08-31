@@ -3,22 +3,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
 import ChatComponent from '../components/ChatComponent';
+import { useSSEChat } from '../hooks/useSSEChat';
 import { API_BASE } from '../config';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  _streaming?: boolean;
-}
 
 export default function CheckInScreen() {
   const navigation = useNavigation<any>();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState('');
-  const [done, setDone] = useState(false);
   const [hasOnboarded, setHasOnboarded] = useState(false);
+  const [initDone, setInitDone] = useState(false);
+
+  const { messages, setMessages, loading, done, send } = useSSEChat({
+    endpoint: '/api/survey/checkin',
+    token,
+    sessionId,
+  });
 
   useEffect(() => {
     init();
@@ -49,78 +48,12 @@ export default function CheckInScreen() {
       }
     } catch (e) {
       setMessages([{ role: 'assistant', content: 'Connection error. Please try again.' }]);
-    }
-  }
-
-  async function sendAnswer(answer: string) {
-    setLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content: answer }]);
-
-    try {
-      const resp = await fetch(`${API_BASE}/api/survey/checkin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ answer, session_id: sessionId }),
-      });
-
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        if (data.mode === 'onboarding') {
-          setMessages(prev => [...prev, { role: 'assistant', content: 'Please complete the survey first.' }]);
-        } else {
-          setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Try again.' }]);
-        }
-        setLoading(false);
-        return;
-      }
-
-      const reader = resp.body?.getReader();
-      const decoder = new TextDecoder();
-      let aiText = '';
-      let buffer = '';
-
-      if (reader) {
-        while (true) {
-          const { done: streamDone, value } = await reader.read();
-          if (streamDone) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.content) {
-                  aiText += data.content;
-                  setMessages(prev => {
-                    const last = prev[prev.length - 1];
-                    if (last?.role === 'assistant' && last._streaming) {
-                      return [...prev.slice(0, -1), { role: 'assistant', content: aiText, _streaming: true }];
-                    }
-                    return [...prev, { role: 'assistant', content: aiText, _streaming: true }];
-                  });
-                }
-                if (data.done) setDone(true);
-              } catch (e) {}
-            }
-          }
-        }
-      }
-
-      setMessages(prev => prev.map((m, i) =>
-        i === prev.length - 1 ? { role: 'assistant', content: aiText || '...' } : m
-      ));
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Connection error.' }]);
     } finally {
-      setLoading(false);
+      setInitDone(true);
     }
   }
 
-  if (!hasOnboarded) {
+  if (initDone && !hasOnboarded) {
     return (
       <ChatComponent
         messages={[]}
@@ -144,7 +77,7 @@ export default function CheckInScreen() {
     <ChatComponent
       messages={messages}
       setMessages={setMessages}
-      onSend={sendAnswer}
+      onSend={send}
       loading={loading}
       title="Daily Check-in"
       subtitle="Take 2 minutes"

@@ -1,16 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Alert, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
 import ChatComponent from '../components/ChatComponent';
-import { API_BASE, COLORS, SPACING, FONT_SIZES } from '../config';
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  _streaming?: boolean;
-}
+import { useSSEChat } from '../hooks/useSSEChat';
+import { API_BASE } from '../config';
 
 const BUSINESS_TYPES = [
   'Restaurant/Cafe', 'Salon/Spa/Barber', 'Plumber/Electrician/HVAC',
@@ -21,19 +15,30 @@ const BUSINESS_TYPES = [
 
 export default function SurveyScreen() {
   const navigation = useNavigation<any>();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState('');
   const [qIndex, setQIndex] = useState(0);
   const [totalQ, setTotalQ] = useState(13);
-  const [done, setDone] = useState(false);
-  const [choices, setChoices] = useState<string[] | null>(null);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [initialMessages, setInitialMessages] = useState<any[] | null>(null);
+  const [initialChoices, setInitialChoices] = useState<string[] | null>(null);
+
+  const { messages, setMessages, loading, choices, done, extraData, send } = useSSEChat({
+    endpoint: '/api/survey/chat',
+    token,
+    sessionId,
+  });
 
   useEffect(() => {
     init();
   }, []);
+
+  // Update progress from SSE data
+  useEffect(() => {
+    if (extraData.state) {
+      setQIndex(extraData.state.q_index || 0);
+      setTotalQ(extraData.state.total_questions || 13);
+    }
+  }, [extraData]);
 
   async function init() {
     const storedToken = await AsyncStorage.getItem('auth_token');
@@ -54,100 +59,35 @@ export default function SurveyScreen() {
         setMessages(data.conversation);
         setQIndex(data.q_index || 0);
         setTotalQ(data.total_questions || 13);
-        setHasStarted(true);
         if (data.q_index >= (data.total_questions || 13)) {
-          setDone(true);
+          // Already done — mark as done
         }
       } else {
-        // New — show business type selection
         setMessages([{ role: 'assistant', content: 'Hey — quick survey about how you run your business. What kind of business do you run?' }]);
-        setChoices(BUSINESS_TYPES);
+        setInitialChoices(BUSINESS_TYPES);
       }
     } catch (e) {
       setMessages([{ role: 'assistant', content: 'Connection error. Please try again.' }]);
     }
   }
 
-  async function sendAnswer(answer: string) {
-    setChoices(null);
-    setLoading(true);
-    setMessages(prev => [...prev, { role: 'user', content: answer }]);
-
-    try {
-      const resp = await fetch(`${API_BASE}/api/survey/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ answer, session_id: sessionId }),
-      });
-
-      if (!resp.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Try again.' }]);
-        setLoading(false);
-        return;
-      }
-
-      const reader = resp.body?.getReader();
-      const decoder = new TextDecoder();
-      let aiText = '';
-      let buffer = '';
-
-      if (reader) {
-        while (true) {
-          const { done: streamDone, value } = await reader.read();
-          if (streamDone) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.content) {
-                  aiText += data.content;
-                  setMessages(prev => {
-                    const last = prev[prev.length - 1];
-                    if (last?.role === 'assistant' && last._streaming) {
-                      return [...prev.slice(0, -1), { role: 'assistant', content: aiText, _streaming: true }];
-                    }
-                    return [...prev, { role: 'assistant', content: aiText, _streaming: true }];
-                  });
-                }
-                if (data.choices) setChoices(data.choices);
-                if (data.done) setDone(true);
-                if (data.state) {
-                  setQIndex(data.state.q_index || 0);
-                  setTotalQ(data.state.total_questions || 13);
-                }
-              } catch (e) {}
-            }
-          }
-        }
-      }
-
-      setMessages(prev => prev.map((m, i) =>
-        i === prev.length - 1 ? { role: 'assistant', content: aiText || '...' } : m
-      ));
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Connection error.' }]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Merge initial choices with streaming choices
+  const activeChoices = choices || initialChoices;
 
   return (
     <ChatComponent
       messages={messages}
       setMessages={setMessages}
-      onSend={sendAnswer}
+      onSend={send}
       loading={loading}
       title="Onboarding"
       subtitle="Daily 15 Survey"
       progress={{ current: qIndex, total: totalQ }}
-      choices={choices}
-      onChoiceSelect={(choice) => sendAnswer(choice)}
+      choices={activeChoices}
+      onChoiceSelect={(choice) => {
+        setInitialChoices(null);
+        send(choice);
+      }}
       done={done}
       doneTitle="You're all set"
       doneText="Your dashboard is ready with personalized cards for your business."
