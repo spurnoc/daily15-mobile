@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
@@ -13,14 +13,17 @@ const BUSINESS_TYPES = [
   'Real Estate', 'Other',
 ];
 
+const OPENING_MESSAGE = 'Hey — quick survey about how you run your business. What kind of business do you run?';
+
 export default function SurveyScreen() {
   const navigation = useNavigation<any>();
   const [token, setToken] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState('');
   const [qIndex, setQIndex] = useState(0);
   const [totalQ, setTotalQ] = useState(13);
-  const [initialMessages, setInitialMessages] = useState<any[] | null>(null);
-  const [initialChoices, setInitialChoices] = useState<string[] | null>(null);
+  const [initialChoices, setInitialChoices] = useState<string[] | null>(BUSINESS_TYPES);
+  const [ready, setReady] = useState(false);
+  const initRef = useRef(false);
 
   const { messages, setMessages, loading, choices, done, extraData, send } = useSSEChat({
     endpoint: '/api/survey/chat',
@@ -28,11 +31,17 @@ export default function SurveyScreen() {
     sessionId,
   });
 
+  // Show opening message immediately
   useEffect(() => {
+    setMessages([{ role: 'assistant', content: OPENING_MESSAGE }]);
+  }, []);
+
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
     init();
   }, []);
 
-  // Update progress from SSE data
   useEffect(() => {
     if (extraData.state) {
       setQIndex(extraData.state.q_index || 0);
@@ -49,30 +58,31 @@ export default function SurveyScreen() {
       await AsyncStorage.setItem('survey_session_id', sid);
     }
     setSessionId(sid);
+    setReady(true);
 
+    // Check if session already has progress
     try {
       const resp = await fetch(`${API_BASE}/api/survey/state?session_id=${sid}`, {
         headers: storedToken ? { Authorization: `Bearer ${storedToken}` } : {},
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({}));
       if (data.conversation && data.conversation.length > 0) {
         setMessages(data.conversation);
         setQIndex(data.q_index || 0);
         setTotalQ(data.total_questions || 13);
-        if (data.q_index >= (data.total_questions || 13)) {
-          // Already done — mark as done
-        }
-      } else {
-        setMessages([{ role: 'assistant', content: 'Hey — quick survey about how you run your business. What kind of business do you run?' }]);
-        setInitialChoices(BUSINESS_TYPES);
+        setInitialChoices(null);
       }
     } catch (e) {
-      setMessages([{ role: 'assistant', content: 'Connection error. Please try again.' }]);
+      // Keep the opening message + choices
     }
   }
 
-  // Merge initial choices with streaming choices
   const activeChoices = choices || initialChoices;
+
+  // Don't render until sessionId is set (prevents sending with empty session)
+  if (!ready) {
+    return null;
+  }
 
   return (
     <ChatComponent
