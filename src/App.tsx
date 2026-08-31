@@ -28,15 +28,6 @@ const appTheme = {
   },
 };
 
-// Haptic feedback helper
-export function haptic(type: 'light' | 'medium' | 'heavy' = 'light') {
-  if (Platform.OS === 'web') return;
-  try {
-    const style = Haptics.ImpactFeedbackStyle[type.charAt(0).toUpperCase() + type.slice(1) as 'Light' | 'Medium' | 'Heavy'];
-    Haptics.impactAsync(style);
-  } catch (e) {}
-}
-
 function AppTabs() {
   return (
     <Tab.Navigator
