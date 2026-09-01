@@ -10,5 +10,8 @@ export function haptic(type: 'light' | 'medium' | 'heavy' = 'light') {
       heavy: Haptics.ImpactFeedbackStyle.Heavy,
     };
     Haptics.impactAsync(styleMap[type]);
-  } catch (e) {}
+  } catch (e) {
+    // Haptics not available or failed — non-critical, log in debug
+    if (__DEV__) console.warn('Haptics failed:', e);
+  }
 }

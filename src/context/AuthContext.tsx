@@ -63,14 +63,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return true;
           }
         }
+        return false;
       } catch (e) {
-        // API unreachable — use a fake token so user can at least see the UI
-        const fakeToken = btoa('demo:0:' + Date.now());
-        await AsyncStorage.setItem('auth_token', fakeToken);
-        await AsyncStorage.setItem('auth_email', email);
-        setToken(fakeToken);
-        setEmail(email);
-        return true;
+        return false;
       }
     }
     try {

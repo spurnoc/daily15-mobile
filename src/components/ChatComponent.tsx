@@ -191,11 +191,15 @@ export default function ChatComponent({
               maxHeight={100}
               autoCorrect
               autoCapitalize="sentences"
+              accessibilityLabel="Type your answer"
+              accessibilityRole="text"
             />
             <TouchableOpacity
               style={[styles.sendBtn, !input.trim() && styles.sendBtnDisabled]}
               onPress={handleSend}
               disabled={!input.trim()}
+              accessibilityLabel="Send message"
+              accessibilityRole="button"
             >
               <Text style={styles.sendBtnIcon}>↑</Text>
             </TouchableOpacity>
