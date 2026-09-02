@@ -13,6 +13,8 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectionResult, setConnectionResult] = useState('');
 
   async function handleSubmit() {
     if (!email || !password) {
@@ -32,6 +34,23 @@ export default function LoginScreen() {
           : 'Could not register. Email may already be in use.'
       );
     }
+  }
+
+  async function testConnection() {
+    setConnecting(true);
+    setConnectionResult('');
+    try {
+      const resp = await fetch(`${API_BASE}/api/health`, { timeout: 5000 } as any);
+      if (resp.ok) {
+        const data = await resp.json();
+        setConnectionResult(`Connected! Server: ${data.service || 'OK'}`);
+      } else {
+        setConnectionResult(`Server returned ${resp.status}`);
+      }
+    } catch (e: any) {
+      setConnectionResult(`Cannot reach server: ${e.message}`);
+    }
+    setConnecting(false);
   }
 
   return (
@@ -95,6 +114,21 @@ export default function LoginScreen() {
               : 'Already have an account? Log in'}
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.testBtn}
+          onPress={testConnection}
+          disabled={connecting}
+        >
+          {connecting ? (
+            <ActivityIndicator color={COLORS.textMuted} size="small" />
+          ) : (
+            <Text style={styles.testBtnText}>Test connection</Text>
+          )}
+        </TouchableOpacity>
+        {connectionResult ? (
+          <Text style={styles.connectionResult}>{connectionResult}</Text>
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );
@@ -163,5 +197,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     textAlign: 'center',
     marginTop: SPACING.md,
+  },
+  testBtn: {
+    marginTop: SPACING.lg,
+    padding: SPACING.sm,
+    alignItems: 'center',
+  },
+  testBtnText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    textDecorationLine: 'underline',
+  },
+  connectionResult: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    fontFamily: 'monospace',
   },
 });
