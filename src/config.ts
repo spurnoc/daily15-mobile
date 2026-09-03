@@ -1,4 +1,4 @@
-export const API_BASE = 'http://10.220.0.2:8040';
+export const API_BASE = 'http://100.115.177.80:8040';
 
 export const COLORS = {
   bg: '#0a0a0a',
