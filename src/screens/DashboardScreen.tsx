@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, RefreshControl,
-  ActivityIndicator, TouchableOpacity, ScrollView,
+  ActivityIndicator, TouchableOpacity, ScrollView, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -226,7 +226,7 @@ export default function DashboardScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerLogo}>D15</Text>
+        <Image source={require('../../assets/spur-brandmark-white.png')} style={styles.headerLogo} />
         </View>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>{businessName}</Text>
@@ -300,16 +300,9 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   headerLogo: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: COLORS.bg,
-    backgroundColor: COLORS.text,
     width: 44,
     height: 44,
-    lineHeight: 44,
-    textAlign: 'center',
     borderRadius: 12,
-    overflow: 'hidden',
   },
   headerInfo: { flex: 1 },
   headerTitle: {

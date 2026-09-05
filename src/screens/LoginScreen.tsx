@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
@@ -59,7 +59,7 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <View style={styles.header}>
-        <Text style={styles.logo}>D15</Text>
+        <Image source={require('../../assets/spur-brandmark-white.png')} style={styles.logo} />
         <Text style={styles.title}>Daily 15</Text>
         <Text style={styles.subtitle}>Your business, simplified</Text>
       </View>
@@ -146,16 +146,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   logo: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: COLORS.text,
-    backgroundColor: COLORS.accentDark,
     width: 80,
     height: 80,
-    lineHeight: 80,
-    textAlign: 'center',
     borderRadius: 20,
-    overflow: 'hidden',
     marginBottom: SPACING.md,
   },
   title: {

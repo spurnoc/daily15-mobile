@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
-  Switch, ActivityIndicator, Linking,
+  Switch, ActivityIndicator, Linking, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../context/AuthContext';
@@ -158,7 +158,10 @@ export default function SettingsScreen() {
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
 
-      <Text style={styles.footer}>Daily 15 · Built by SPUR</Text>
+      <View style={styles.footerRow}>
+        <Image source={require('../../assets/spur-brandmark-transparent.png')} style={styles.footerLogo} />
+        <Text style={styles.footer}>Daily 15 · Built by SPUR</Text>
+      </View>
     </View>
   );
 }
@@ -193,4 +196,6 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: COLORS.danger, fontSize: FONT_SIZES.md, fontWeight: '600' },
   footer: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, textAlign: 'center' },
+  footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  footerLogo: { width: 16, height: 16 },
 });
